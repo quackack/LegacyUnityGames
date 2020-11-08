@@ -1,0 +1,36 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSBufferSet
+
+//The size of a dimension in our Current Buffer, and the Four Vectors To Lerp Between
+uint size;
+float4 XInit;
+float4 XFin;
+float4 YInit;
+float4 YFin;
+float4 ZInit;
+float4 ZFin;
+
+// Our buffers that we will hold our complex numbers
+RWStructuredBuffer<float4> Constant;
+
+uint3 getRealPos(uint rawX)
+{
+	uint invertX = size*size*size - rawX - 1;
+	
+	uint yZcomponent = invertX/size;
+	uint realx = invertX - (yZcomponent)*size;
+	uint realz = yZcomponent/(size);
+	uint realy = yZcomponent - realz*size;
+	return uint3(realx, realy, realz);
+}
+
+[numthreads(16,1,1)]
+void CSBufferSet (uint3 id : SV_DispatchThreadID)
+{
+	uint3 real = getRealPos(id.x);
+	float3 pos = float3(real)/float(size-1);
+	float3 invPos = float3(1, 1, 1) - pos;
+	Constant[id.x] = pos.x*XInit + invPos.x*XFin + 
+					 pos.y*YInit + invPos.y*YFin +
+					 pos.z*ZInit + invPos.z*ZFin;
+}

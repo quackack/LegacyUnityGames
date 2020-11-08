@@ -1,0 +1,58 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSFormEdge
+
+//The size of a dimension in our Current Buffer, and the Four Vectors To Lerp Between
+uint size;
+
+// Our buffers that we will hold our complex numbers
+RWStructuredBuffer<float> Working;
+RWStructuredBuffer<float> Output;
+
+
+uint3 getRealPos(uint rawX)
+{
+	uint invertX = size*size*size - rawX - 1;
+	
+	uint yZcomponent = invertX/size;
+	uint realx = invertX - (yZcomponent)*size;
+	uint realz = yZcomponent/(size);
+	uint realy = yZcomponent - realz*size;
+	return uint3(realx, realy, realz);
+}
+uint getCoPos(uint3 formatted)
+{
+	uint invertX = (formatted.z*size + formatted.y)*size + formatted.x;
+	return ((size*size*size) -invertX) -1;
+}
+
+float isConvergent(float toTest)
+{
+	return (isnan(toTest) || isinf(toTest) || toTest > 16) ? 0 : 1;
+}
+
+float isDivergent(float toTest)
+{
+	return (isnan(toTest) || isinf(toTest) || toTest > 16) ? 1 : 0;
+}
+
+float workingConverge(uint xind, uint yind, uint zind)
+{
+	return isConvergent(Working[getCoPos(uint3(xind,yind,zind))]);
+}
+
+[numthreads(16,1,1)]
+void CSFormEdge (uint3 id : SV_DispatchThreadID)
+{
+	//Clamp does not work on negative numbers (or negative numbers do not work).
+	uint3 mid = getRealPos(id.x);
+	uint mX = size - 1;
+	uint3 les = clamp(mid, 1, mX) - 1;
+	uint3 mor = clamp(mid + 1, 1, mX);
+	
+	float doIDiverge = isDivergent(Working[id.x]);
+	
+	Output[id.x] = doIDiverge*saturate(workingConverge(mor.x, mid.y, mid.z) + workingConverge(les.x, mid.y, mid.z) +
+										workingConverge(mid.x, mor.y, mid.z) + workingConverge(mid.x, les.y, mid.z) +
+										workingConverge(mid.x, mid.y, mor.z) + workingConverge(mid.x, mid.y, les.z)) +
+										0.25*(1 - doIDiverge);
+}

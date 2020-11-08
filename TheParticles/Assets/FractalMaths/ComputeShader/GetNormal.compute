@@ -1,0 +1,97 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSGetNormal
+
+// Our buffers that we will hold our complex numbers
+RWStructuredBuffer<float> Working;
+RWStructuredBuffer<float> Output;
+RWStructuredBuffer<float3> vertNorm;
+
+//The size of a dimension in our Current Buffer, and the Four Vectors To Lerp Between
+uint size;
+
+uint3 getRealPos(uint rawX)
+{
+	uint invertX = size*size*size - rawX - 1;
+	
+	uint yZcomponent = invertX/size;
+	uint realx = invertX - (yZcomponent)*size;
+	uint realz = yZcomponent/(size);
+	uint realy = yZcomponent - realz*size;
+	return uint3(realx, realy, realz);
+}
+uint getCoPos(uint3 formatted)
+{
+	uint invertX = (formatted.z*size + formatted.y)*size + formatted.x;
+	return ((size*size*size) -invertX) -1;
+}
+
+float isConvergent(float toTest)
+{
+	return (isnan(toTest) || isinf(toTest) || toTest > 8) ? 0 : 1;
+}
+
+float isDivergent(float toTest)
+{
+	return (isnan(toTest) || isinf(toTest) || toTest > 8) ? 1 : 0;
+}
+
+float workingDiverge(uint3 co)
+{
+	return isDivergent(Working[getCoPos(co)]);
+}
+
+[numthreads(16,1,1)]
+void CSGetNormal (uint3 id : SV_DispatchThreadID)
+{
+	//Clamp does not work on negative numbers (or negative numbers do not work).
+	uint3 mid = getRealPos(id.x);
+	uint mX = size - 1;
+	uint3 les = clamp(mid, 1, mX) - 1;
+	uint3 mor = clamp(mid + 1, 1, mX);
+	
+	if (Output[id.x] == 1)
+	{
+	float3 norm = workingDiverge(uint3(les.x,les.y,les.z))*float3(1, 1, 1);
+	norm += workingDiverge(uint3(les.x,les.y,mid.z))*float3(2, 2, 0);
+	norm += workingDiverge(uint3(les.x,les.y,mor.z))*float3(1, 1, -1);
+	
+	norm += workingDiverge(uint3(les.x,mid.y,les.z))*float3(2, 0, 2);
+	norm += workingDiverge(uint3(les.x,mid.y,mid.z))*float3(3, 0, 0);
+	norm += workingDiverge(uint3(les.x,mid.y,mor.z))*float3(2, 0, -2);
+	
+	norm += workingDiverge(uint3(les.x,mor.y,les.z))*float3(1, -1, 1);
+	norm += workingDiverge(uint3(les.x,mor.y,mid.z))*float3(2, -2, 0);
+	norm += workingDiverge(uint3(les.x,mor.y,mor.z))*float3(1, -1, -1);
+	
+	
+	norm += workingDiverge(uint3(mid.x,les.y,les.z))*float3(0, 2, 2);
+	norm += workingDiverge(uint3(mid.x,les.y,mid.z))*float3(0, 3, 0);
+	norm += workingDiverge(uint3(mid.x,les.y,mor.z))*float3(0, 2, -2);
+	
+	norm += workingDiverge(uint3(mid.x,mid.y,les.z))*float3(0, 0, 3);
+
+	norm += workingDiverge(uint3(mid.x,mid.y,mor.z))*float3(0, 0, -3);
+	
+	norm += workingDiverge(uint3(mid.x,mor.y,les.z))*float3(0, -2, 2);
+	norm += workingDiverge(uint3(mid.x,mor.y,mid.z))*float3(0, -3, 0);
+	norm += workingDiverge(uint3(mid.x,mor.y,mor.z))*float3(0, -2, -2);
+	
+	
+	norm += workingDiverge(uint3(mor.x,les.y,les.z))*float3(-1, 1, 1);
+	norm += workingDiverge(uint3(mor.x,les.y,mid.z))*float3(-2, 2, 0);
+	norm += workingDiverge(uint3(mor.x,les.y,mor.z))*float3(-1, 1, -1);
+	
+	norm += workingDiverge(uint3(mor.x,mid.y,les.z))*float3(-2, 0, 2);
+	norm += workingDiverge(uint3(mor.x,mid.y,mid.z))*float3(-3, 0, 0);
+	norm += workingDiverge(uint3(mor.x,mid.y,mor.z))*float3(-2, 0, -2);
+	
+	norm += workingDiverge(uint3(mor.x,mor.y,les.z))*float3(-1, -1, 1);
+	norm += workingDiverge(uint3(mor.x,mor.y,mid.z))*float3(-2, -2, 0);
+	norm += workingDiverge(uint3(mor.x,mor.y,mor.z))*float3(-1, -1, -1);
+	vertNorm[id.x] = normalize(norm);
+	}
+	else
+	{
+	vertNorm[id.x] = float3(0, 0, 0);
+	}
+}

@@ -1,0 +1,77 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSPolynomial
+
+//Our rules for complex mutiplication
+struct MultRules
+{
+	float4x4 hC;
+	float4x4 iC;
+	float4x4 jC;
+	float4x4 kC;
+};
+
+//Constants for polynomial Multiplication
+float constantCo;
+float Zto1Co;
+float Zto2Co;
+float Zto3Co;
+float Zto4Co;
+
+//Use these for Julia set building.
+float isJulia;
+float4 juliaC;
+
+// Our buffers that we will hold our complex numbers
+RWStructuredBuffer<float4> Constant;
+RWStructuredBuffer<float> Working;
+
+
+RWStructuredBuffer<MultRules> ruleSet;
+
+//How many times to apply this.
+uint iterations;
+
+float4 Multiply(float4 c1, float4 c2)
+{
+	float4 hCoeficients = mul(c1, ruleSet[0].hC);
+	float4 iCoeficients = mul(c1, ruleSet[0].iC);
+	float4 jCoeficients = mul(c1, ruleSet[0].jC);
+	float4 kCoeficients = mul(c1, ruleSet[0].kC);
+	
+	
+	float4x4 sumMatrix = {	hCoeficients.x, iCoeficients.x, jCoeficients.x, kCoeficients.x,
+							hCoeficients.y, iCoeficients.y, jCoeficients.y, kCoeficients.y,
+							hCoeficients.z, iCoeficients.z, jCoeficients.z, kCoeficients.z,
+							hCoeficients.w, iCoeficients.w, jCoeficients.w, kCoeficients.w};
+	return mul(c2, sumMatrix);
+}
+
+float4 ApplyPolynomial (float4 constant, float4 lastResult)
+{
+	float4 final = constantCo*constant + lastResult*Zto1Co;
+	
+	float4 ZtoN = Multiply(lastResult, lastResult);
+	
+	final = final + Zto2Co*ZtoN;
+	
+	ZtoN = Multiply(ZtoN, lastResult);
+	
+	final = final + Zto3Co*ZtoN;
+	
+	ZtoN = Multiply(ZtoN, lastResult);
+	
+    return final + Zto4Co*ZtoN;
+}
+
+[numthreads(16,1,1)]
+void CSPolynomial (uint3 id : SV_DispatchThreadID)
+{
+	float4 result = Constant[id.x];
+	float4 C = result*(1-isJulia) + juliaC*isJulia;;
+	for (uint i = 0; i < iterations; i++)
+	{
+		result = ApplyPolynomial(C, result);
+	}
+	Constant[id.x] = result;
+	Working[id.x] = dot(result, result);
+}

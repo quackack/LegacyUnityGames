@@ -1,0 +1,85 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSBlurNorms
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWStructuredBuffer<float> Output;
+RWStructuredBuffer<float3> vertNormStart;
+RWStructuredBuffer<float3> vertNormResult;
+
+//The size of a dimension in our Current Buffer, and the Four Vectors To Lerp Between
+uint size;
+
+uint3 getRealPos(uint rawX)
+{
+	uint invertX = size*size*size - rawX - 1;
+	
+	uint yZcomponent = invertX/size;
+	uint realx = invertX - (yZcomponent)*size;
+	uint realz = yZcomponent/(size);
+	uint realy = yZcomponent - realz*size;
+	return uint3(realx, realy, realz);
+}
+uint getCoPos(uint3 formatted)
+{
+	uint invertX = (formatted.z*size + formatted.y)*size + formatted.x;
+	return ((size*size*size) -invertX) -1;
+}
+
+float3 getNormFrom(uint3 raw)
+{
+	return vertNormStart[getCoPos(raw)];
+}
+
+[numthreads(16,1,1)]
+void CSBlurNorms (uint3 id : SV_DispatchThreadID)
+{
+    uint3 mid = getRealPos(id.x);
+	uint mX = size - 1;
+	uint3 les = clamp(mid, 1, mX) - 1;
+	uint3 mor = clamp(mid + 1, 1, mX);
+	
+	float doIConverge = Output[id.x];
+	
+	float3 norm = vertNormStart[id.x]*4;
+	
+	norm += getNormFrom(uint3(les.x,les.y,les.z));
+	norm += getNormFrom(uint3(les.x,les.y,mid.z));
+	norm += getNormFrom(uint3(les.x,les.y,mor.z));
+	
+	norm += getNormFrom(uint3(les.x,mid.y,les.z));
+	norm += getNormFrom(uint3(les.x,mid.y,mid.z));
+	norm += getNormFrom(uint3(les.x,mid.y,mor.z));
+	
+	norm += getNormFrom(uint3(les.x,mor.y,les.z));
+	norm += getNormFrom(uint3(les.x,mor.y,mid.z));
+	norm += getNormFrom(uint3(les.x,mor.y,mor.z));
+	
+	
+	norm += getNormFrom(uint3(mid.x,les.y,les.z));
+	norm += getNormFrom(uint3(mid.x,les.y,mid.z));
+	norm += getNormFrom(uint3(mid.x,les.y,mor.z));
+	
+	norm += getNormFrom(uint3(mid.x,mid.y,les.z));
+	
+	norm += getNormFrom(uint3(mid.x,mid.y,mor.z));
+	
+	norm += getNormFrom(uint3(mid.x,mor.y,les.z));
+	norm += getNormFrom(uint3(mid.x,mor.y,mid.z));
+	norm += getNormFrom(uint3(mid.x,mor.y,mor.z));
+	
+	
+	norm += getNormFrom(uint3(mor.x,les.y,les.z));
+	norm += getNormFrom(uint3(mor.x,les.y,mid.z));
+	norm += getNormFrom(uint3(mor.x,les.y,mor.z));
+	
+	norm += getNormFrom(uint3(mor.x,mid.y,les.z));
+	norm += getNormFrom(uint3(mor.x,mid.y,mid.z));
+	norm += getNormFrom(uint3(mor.x,mid.y,mor.z));
+	
+	norm += getNormFrom(uint3(mor.x,mor.y,les.z));
+	norm += getNormFrom(uint3(mor.x,mor.y,mid.z));
+	norm += getNormFrom(uint3(mor.x,mor.y,mor.z));
+	
+	vertNormResult[id.x] = normalize(norm);
+}

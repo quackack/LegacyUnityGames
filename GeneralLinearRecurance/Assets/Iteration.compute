@@ -1,0 +1,57 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWStructuredBuffer<float> Result;
+float4 xUnit;
+float4 yUnit;
+float4 zUnit;
+float4 Start;
+
+int iterationCount;
+int dimension;
+
+float4x4 Hresult;
+float4x4 Iresult;
+float4x4 Jresult;
+float4x4 Kresult;
+
+float4 co0;
+float4 co1;
+float4 co2;
+float4 co3;
+
+float4 psuedoMult(float4 x, float4 y)
+{
+	float4x4 finalMat = { mul(x, Hresult),
+		mul(x, Iresult),
+		mul(x, Jresult),
+		mul(x, Kresult) };
+	return mul(finalMat, y);
+}
+
+float4 iterate(float4 x, float4 constant)
+{
+	float4 sum = psuedoMult(co0, constant) + psuedoMult(co1, x);
+	float4 x2 = psuedoMult(x, x);
+	sum += psuedoMult(co2, x2);
+	x2 = psuedoMult(x, x2);
+	return sum + psuedoMult(co3, x2);
+}
+
+[numthreads(4,4,4)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+	float4 constant = Start + id.x* xUnit + id.y * yUnit + id.z*zUnit;
+	float4 curSum = constant;
+	uint toReturn = 0;
+	for (int i = 0; i < iterationCount; i++) {
+		curSum = iterate(curSum, constant);
+		curSum = iterate(curSum, constant);
+		if (dot(curSum, curSum) > 32) {
+			toReturn = iterationCount + 1;
+		}
+	}
+	Result[id.z + dimension*id.y + dimension*dimension*id.x] = toReturn;
+}
